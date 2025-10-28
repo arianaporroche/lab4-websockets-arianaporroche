@@ -48,8 +48,8 @@ class ElizaServerTest {
 
         val size = list.size
         assertTrue(size >= 4)
-        assertTrue(list[3] == "Can you think of a specific example?" || list[4]== "Can you think of a specific example?")
-        assertTrue(list[3] == "---" || list[4]== "---")
+        assertTrue(list[3] == "Can you think of a specific example?" || list[4] == "Can you think of a specific example?")
+        assertTrue(list[3] == "---" || list[4] == "---")
         // 1. EXPLAIN WHY size = list.size IS NECESSARY
         // 2. REPLACE BY assertXXX expression that checks an interval; assertEquals must not be used;
         // 3. EXPLAIN WHY assertEquals CANNOT BE USED AND WHY WE SHOULD CHECK THE INTERVAL
