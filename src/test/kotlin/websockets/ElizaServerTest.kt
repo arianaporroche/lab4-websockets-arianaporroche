@@ -8,7 +8,7 @@ import jakarta.websocket.ContainerProvider
 import jakarta.websocket.OnMessage
 import jakarta.websocket.Session
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Disabled
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT
@@ -36,7 +36,6 @@ class ElizaServerTest {
         assertEquals("The doctor is in.", list[0])
     }
 
-    @Disabled // Remove this line when you implement onChat
     @Test
     fun onChat() {
         logger.info { "Test thread" }
@@ -46,7 +45,11 @@ class ElizaServerTest {
         val client = ComplexClient(list, latch)
         client.connect("ws://localhost:$port/eliza")
         latch.await()
+
         val size = list.size
+        assertTrue(size >= 4)
+        assertTrue(list[3] == "Can you think of a specific example?" || list[4]== "Can you think of a specific example?")
+        assertTrue(list[3] == "---" || list[4]== "---")
         // 1. EXPLAIN WHY size = list.size IS NECESSARY
         // 2. REPLACE BY assertXXX expression that checks an interval; assertEquals must not be used;
         // 3. EXPLAIN WHY assertEquals CANNOT BE USED AND WHY WE SHOULD CHECK THE INTERVAL
@@ -73,7 +76,6 @@ class ComplexClient(
     private val latch: CountDownLatch,
 ) {
     @OnMessage
-    @Suppress("UNUSED_PARAMETER") // Remove this line when you implement onMessage
     fun onMessage(
         message: String,
         session: Session,
@@ -81,9 +83,10 @@ class ComplexClient(
         logger.info { "Client received: $message" }
         list.add(message)
         latch.countDown()
-        // 5. COMPLETE if (expression) {
-        // 6. COMPLETE   sentence
-        // }
+
+        if (list.size == 3 && list.contains("---")) {
+            session.basicRemote.sendText("I am always tired")
+        }
     }
 }
 
