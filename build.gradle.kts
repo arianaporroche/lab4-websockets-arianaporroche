@@ -21,6 +21,10 @@ dependencies {
     implementation(libs.spring.boot.starter.websocket)
     implementation(libs.kotlin.logging)
 
+    // For AnalyticsUnitTest
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.0")
+
     testImplementation(libs.spring.boot.starter.test)
     testImplementation(libs.ninjasquad.springmocck)
 }

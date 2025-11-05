@@ -46,8 +46,8 @@
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
-      document.getElementById("clients").textContent = data.totalClientsConnected;
-      document.getElementById("total-clients").textContent = data.clientsEver;
+      document.getElementById("clients").textContent = data.activeElizaClients;
+      document.getElementById("total-clients").textContent = data.analyticsConnectionsEver;
       document.getElementById("disconnected").textContent = data.clientsDisconnected;
       document.getElementById("messages-received").textContent = data.messagesReceived;
       document.getElementById("messages-sent").textContent = data.messagesSent;

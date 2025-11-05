@@ -69,7 +69,7 @@ class ElizaEndpoint {
     @OnOpen
     fun onOpen(session: Session) {
         activeSessions.add(session)
-        AnalyticsEndpoint().sendMetricsToAll()
+        AnalyticsEndpoint.sendMetricsToAll()
 
         logger.info { "Server Connected ... Session ${session.id}" }
 
@@ -93,7 +93,7 @@ class ElizaEndpoint {
         closeReason: CloseReason,
     ) {
         activeSessions.remove(session)
-        AnalyticsEndpoint().sendMetricsToAll()
+        AnalyticsEndpoint.sendMetricsToAll()
 
         logger.info { "Session ${session.id} closed because of $closeReason" }
 
@@ -113,20 +113,20 @@ class ElizaEndpoint {
         logger.info { "Server Message ... Session ${session.id}" }
         val currentLine = Scanner(message.lowercase(Locale.getDefault()))
         if (currentLine.findInLine("bye") == null) {
-            AnalyticsEndpoint().messageReceived(message)
+            AnalyticsEndpoint.messageReceived(message)
 
             logger.info { "Server received \"${message}\"" }
             runCatching {
                 if (session.isOpen) {
                     with(session.basicRemote) {
                         sendTextSafe(eliza.respond(currentLine))
-                        AnalyticsEndpoint().messageSent()
+                        AnalyticsEndpoint.messageSent()
 
                         sendTextSafe("---")
-                        AnalyticsEndpoint().messageSent()
+                        AnalyticsEndpoint.messageSent()
 
                         broadcast("[Session ${session.id}]: $message")
-                        AnalyticsEndpoint().messageSent()
+                        AnalyticsEndpoint.messageSent()
                     }
                 }
             }.onFailure {
@@ -150,7 +150,7 @@ class ElizaEndpoint {
         for (s in activeSessions) {
             s.sendTextSafe(message)
         }
-        AnalyticsEndpoint().sendMetricsToAll()
+        AnalyticsEndpoint.sendMetricsToAll()
     }
 
     private fun Session.sendTextSafe(text: String) {
@@ -169,17 +169,53 @@ class ElizaEndpoint {
 class AnalyticsEndpoint {
     companion object {
         val dashboardSessions: MutableSet<Session> = CopyOnWriteArraySet()
-        var totalClientsEver = 0
+        var analyticsConnectionsEver = 0
         var clientsDisconnected = 0
         var messagesReceived = 0
         var messagesSent = 0
         var lastMessage: String? = null
+
+        fun messageReceived(msg: String) {
+            messagesReceived++
+            lastMessage = msg
+            sendMetricsToAll()
+        }
+
+        fun messageSent() {
+            messagesSent++
+            sendMetricsToAll()
+        }
+
+        fun sendMetricsToAll() {
+            val metrics = getMetricsJson()
+            for (s in dashboardSessions) {
+                if (s.isOpen) s.basicRemote.sendTextSafe(metrics)
+            }
+        }
+
+        private fun sendMetrics(session: Session) {
+            if (session.isOpen) {
+                session.basicRemote.sendTextSafe(getMetricsJson())
+            }
+        }
+
+        private fun getMetricsJson(): String =
+            """
+            {
+                "activeElizaClients": ${ElizaEndpoint.activeSessions.size},
+                "analyticsConnectionsEver": $analyticsConnectionsEver,
+                "clientsDisconnected": $clientsDisconnected,
+                "messagesReceived": $messagesReceived,
+                "messagesSent": $messagesSent,
+                "lastMessage": "${lastMessage ?: ""}"
+            }
+            """.trimIndent()
     }
 
     @OnOpen
     fun onOpen(session: Session) {
         dashboardSessions.add(session)
-        totalClientsEver++
+        analyticsConnectionsEver++
         sendMetrics(session)
     }
 
@@ -189,40 +225,4 @@ class AnalyticsEndpoint {
         clientsDisconnected++
         sendMetricsToAll()
     }
-
-    fun messageReceived(msg: String) {
-        messagesReceived++
-        lastMessage = msg
-        sendMetricsToAll()
-    }
-
-    fun messageSent() {
-        messagesSent++
-        sendMetricsToAll()
-    }
-
-    fun sendMetricsToAll() {
-        val metrics = getMetricsJson()
-        for (s in dashboardSessions) {
-            if (s.isOpen) s.basicRemote.sendTextSafe(metrics)
-        }
-    }
-
-    private fun sendMetrics(session: Session) {
-        if (session.isOpen) {
-            session.basicRemote.sendTextSafe(getMetricsJson())
-        }
-    }
-
-    private fun getMetricsJson(): String =
-        """
-        {
-            "totalClientsConnected": ${ElizaEndpoint.activeSessions.size},
-            "clientsEver": $totalClientsEver,
-            "clientsDisconnected": $clientsDisconnected,
-            "messagesReceived": $messagesReceived,
-            "messagesSent": $messagesSent,
-            "lastMessage": "${lastMessage ?: ""}"
-        }
-        """.trimIndent()
 }
