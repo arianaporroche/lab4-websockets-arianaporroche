@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>WebSocket Analytics Dashboard</title>
+<link rel="stylesheet" href="dashboard.css">
+</head>
+<body>
+<h1>WebSocket Analytics Dashboard</h1>
+
+<div class="card">
+    <div class="metric-label">Total clients connected</div>
+    <div class="metric-value" id="clients">0</div>
+</div>
+
+<script>
+const ws = new WebSocket("ws://localhost:8080/analytics");
+
+ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    const clientsEl = document.getElementById("clients");
+
+    // Animate number change
+    clientsEl.classList.add("update");
+    clientsEl.textContent = data.totalClients;
+
+    setTimeout(() => {
+        clientsEl.classList.remove("update");
+    }, 300);
+};
+</script>
+</body>
+</html>
