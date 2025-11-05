@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component
 import org.springframework.web.socket.server.standard.ServerEndpointExporter
 import java.util.Locale
 import java.util.Scanner
+import java.util.concurrent.CopyOnWriteArraySet
 
 @SpringBootApplication
 class Application
@@ -57,7 +58,7 @@ class ElizaEndpoint {
 
     companion object {
         // Set concurrente que guarda las sesiones abiertas
-        val activeSessions: MutableSet<Session> = java.util.concurrent.CopyOnWriteArraySet()
+        val activeSessions: MutableSet<Session> = CopyOnWriteArraySet()
     }
 
     /**
@@ -69,10 +70,13 @@ class ElizaEndpoint {
     fun onOpen(session: Session) {
         activeSessions.add(session)
         logger.info { "Server Connected ... Session ${session.id}" }
+
         with(session.basicRemote) {
             sendTextSafe("The doctor is in.")
             sendTextSafe("What's on your mind?")
             sendTextSafe("---")
+
+            broadcast("A new client joined. Total: ${activeSessions.size}")
         }
     }
 
@@ -88,6 +92,7 @@ class ElizaEndpoint {
     ) {
         activeSessions.remove(session)
         logger.info { "Session ${session.id} closed because of $closeReason" }
+        broadcast("A client disconnected. Remaining: ${activeSessions.size}")
     }
 
     /**
@@ -109,6 +114,8 @@ class ElizaEndpoint {
                     with(session.basicRemote) {
                         sendTextSafe(eliza.respond(currentLine))
                         sendTextSafe("---")
+
+                        broadcast("[Session ${session.id}]: $message")
                     }
                 }
             }.onFailure {
@@ -126,5 +133,21 @@ class ElizaEndpoint {
         errorReason: Throwable,
     ) {
         logger.error(errorReason) { "Session ${session.id} closed because of ${errorReason.javaClass.name}" }
+    }
+
+    private fun broadcast(message: String) {
+        for (s in activeSessions) {
+            s.sendTextSafe(message)
+        }
+    }
+
+    private fun Session.sendTextSafe(text: String) {
+        try {
+            synchronized(this) {
+                if (isOpen) basicRemote.sendText(text)
+            }
+        } catch (e: Exception) {
+            logger.warn(e) { "Failed to send message to $id" }
+        }
     }
 }

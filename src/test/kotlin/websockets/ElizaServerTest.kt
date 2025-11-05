@@ -40,21 +40,87 @@ class ElizaServerTest {
 
     @Test
     fun onOpen() {
+        /*
+         * ***************************************************
+         *  MESSAGE FLOW WITHOUT BROADCAST
+         *  (the order of the messages may not be identical)
+         * ***************************************************
+         * (onOpen from ElizaServer)
+         *      -> The doctor is in.
+         *      -> What's on your mind?
+         *      -> ---
+         *
+         * ***************************************************
+         *  MESSAGE FLOW WITH BROADCAST
+         *  (the order of the messages may not be identical)
+         * ***************************************************
+         * (onOpen from ElizaServer)
+         *      -> The doctor is in.
+         *      -> What's on your mind?
+         *      -> ---
+         *      -> A new client joined. Total: 1
+         */
         logger.info { "This is the test worker" }
-        val latch = CountDownLatch(3)
+
+        // ****Code with broadcast****
+        val latch = CountDownLatch(4)
+        // ****Code without broadcast****
+        // val latch = CountDownLatch(3)
+
         val list = mutableListOf<String>()
 
         val client = SimpleClient(list, latch)
         client.connect("ws://localhost:$port/eliza")
         latch.await()
-        assertEquals(3, list.size)
+
+        // ****Code with broadcast****
+        assertEquals(4, list.size)
+        // ****Code without broadcast****
+        // assertEquals(3, list.size)
+
         assertEquals("The doctor is in.", list[0])
     }
 
     @Test
     fun onChat() {
+        /*
+         * ***************************************************
+         *  MESSAGE FLOW WITHOUT BROADCAST
+         *  (the order of the messages may not be identical)
+         * ***************************************************
+         * (onOpen from ElizaServer)
+         *      -> The doctor is in.
+         *      -> What's on your mind?
+         *      -> ---
+         * (onMsg from ComplexClient)
+         *      <- I am always tired
+         * (onMsg from ElizaServer)
+         *      -> Can you think of a specific example?
+         *      -> ---
+         *
+         * ***************************************************
+         *  MESSAGE FLOW WITH BROADCAST
+         *  (the order of the messages may not be identical)
+         * ***************************************************
+         * (onOpen from ElizaServer)
+         *      -> The doctor is in.
+         *      -> What's on your mind?
+         *      -> ---
+         *      -> A new client joined. Total: 1
+         * (onMsg from ComplexClient)
+         *      <- I am always tired
+         * (onMsg from ElizaServer)
+         *      -> Can you think of a specific example?
+         *      -> ---
+         *      -> [Session 0]: I am always tired
+         */
         logger.info { "Test thread" }
-        val latch = CountDownLatch(4)
+
+        // ****Code with broadcast****
+        val latch = CountDownLatch(6)
+        // ****Code without broadcast****
+        // val latch = CountDownLatch(4)
+
         val list = mutableListOf<String>()
 
         val client = ComplexClient(list, latch)
@@ -62,12 +128,28 @@ class ElizaServerTest {
         latch.await()
 
         val size = list.size
-        assertTrue(size >= 4)
-        assertTrue(list[3] == "Can you think of a specific example?" || list[4] == "Can you think of a specific example?")
-        assertTrue(list[3] == "---" || list[4] == "---")
+
+        // ****Code with broadcast****
+        assertTrue(size >= 6)
+        assertTrue(
+            list[4] == "Can you think of a specific example?" ||
+                list[5] == "Can you think of a specific example?",
+        )
+        // ****Code without broadcast****
+        // assertTrue(size >= 4)
+        // assertTrue(
+        //     list[3] == "Can you think of a specific example?" ||
+        //     list[4] == "Can you think of a specific example?"
+        // )
+
         // 1. EXPLAIN WHY size = list.size IS NECESSARY
+        //      Because WebSocket communication is asynchronous, and messages
+        //      can arrive during the other asserts.
         // 2. REPLACE BY assertXXX expression that checks an interval; assertEquals must not be used;
+        //      assertTrue
         // 3. EXPLAIN WHY assertEquals CANNOT BE USED AND WHY WE SHOULD CHECK THE INTERVAL
+        //      Because message timing and order are non-deterministic, so the
+        //      number of messages received can vary at different time
         // 4. COMPLETE assertEquals(XXX, list[XXX])
     }
 }
