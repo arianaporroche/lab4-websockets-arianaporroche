@@ -7,8 +7,10 @@ import jakarta.websocket.ClientEndpoint
 import jakarta.websocket.ContainerProvider
 import jakarta.websocket.OnMessage
 import jakarta.websocket.Session
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT
@@ -22,6 +24,19 @@ private val logger = KotlinLogging.logger {}
 class ElizaServerTest {
     @LocalServerPort
     private var port: Int = 0
+
+    @BeforeEach
+    fun setUp() {
+        // Limpia el estado por si quedó algo de otro test
+        ElizaEndpoint.activeSessions.clear()
+    }
+
+    @AfterEach
+    fun tearDown() {
+        // Cierra conexiones abiertas y limpia
+        ElizaEndpoint.activeSessions.forEach { it.close() }
+        ElizaEndpoint.activeSessions.clear()
+    }
 
     @Test
     fun onOpen() {
