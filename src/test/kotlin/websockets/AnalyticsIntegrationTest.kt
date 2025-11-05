@@ -9,6 +9,7 @@ import jakarta.websocket.Session
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -23,6 +24,15 @@ private val logger = KotlinLogging.logger {}
 class AnalyticsIntegrationTest {
     @LocalServerPort
     private var port: Int = 0
+
+    @AfterEach
+    fun tearDown() {
+        // Cierra sesiones del servidor
+        ElizaEndpoint.activeSessions.forEach { session ->
+            if (session.isOpen) session.close()
+        }
+        ElizaEndpoint.activeSessions.clear()
+    }
 
     @Test
     fun testAnalyticsInitialMetrics() {

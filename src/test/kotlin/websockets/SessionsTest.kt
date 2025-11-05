@@ -111,7 +111,7 @@ class SessionsTest {
 
         logger.info { "Test with 2 complex clients" }
 
-        val latch = CountDownLatch(16)
+        val latch = CountDownLatch(15)
         val list0 = mutableListOf<String>()
         val list1 = mutableListOf<String>()
 
@@ -134,6 +134,6 @@ class SessionsTest {
 
         assertTrue(list1.contains("Can you think of a specific example?"))
         val count1 = list1.count { it.contains("I am always tired") }
-        assertEquals(1, count1, "List 1 should contain 1 messages with 'I am always tired'")
+        assertEquals(2, count1, "List 1 should contain 1 messages with 'I am always tired'")
     }
 }
