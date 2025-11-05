@@ -139,6 +139,7 @@ class ElizaEndpoint {
         for (s in activeSessions) {
             s.sendTextSafe(message)
         }
+        AnalyticsEndpoint().sendMetricsToAll()
     }
 
     private fun Session.sendTextSafe(text: String) {
@@ -149,5 +150,48 @@ class ElizaEndpoint {
         } catch (e: Exception) {
             logger.warn(e) { "Failed to send message to $id" }
         }
+    }
+}
+
+@ServerEndpoint("/analytics")
+@Component
+class AnalyticsEndpoint {
+    companion object {
+        val dashboardSessions: MutableSet<Session> = CopyOnWriteArraySet()
+    }
+
+    @OnOpen
+    fun onOpen(session: Session) {
+        dashboardSessions.add(session)
+        sendMetrics(session) // envía métricas iniciales al conectarse
+    }
+
+    @OnClose
+    fun onClose(session: Session) {
+        dashboardSessions.remove(session)
+    }
+
+    fun sendMetricsToAll() {
+        val metrics = getMetricsJson()
+        for (s in dashboardSessions) {
+            if (s.isOpen) {
+                s.basicRemote.sendText(metrics)
+            }
+        }
+    }
+
+    private fun sendMetrics(session: Session) {
+        if (session.isOpen) {
+            session.basicRemote.sendText(getMetricsJson())
+        }
+    }
+
+    private fun getMetricsJson(): String {
+        val totalClients = ElizaEndpoint.activeSessions.size
+        return """
+            {
+                "totalClients": $totalClients
+            }
+            """.trimIndent()
     }
 }
