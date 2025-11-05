@@ -2,32 +2,65 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>WebSocket Analytics Dashboard</title>
+<title>WebSocket Analytics</title>
 <link rel="stylesheet" href="dashboard.css">
 </head>
 <body>
-<h1>WebSocket Analytics Dashboard</h1>
+  <header>
+    <h1>WebSocket Analytics Dashboard</h1>
+  </header>
 
-<div class="card">
-    <div class="metric-label">Total clients connected</div>
-    <div class="metric-value" id="clients">0</div>
-</div>
+  <div class="metrics-container">
+    <div class="metric">
+      <h2>Total clients connected</h2>
+      <p id="clients">0</p>
+    </div>
+    <div class="metric">
+      <h2>Total clients ever</h2>
+      <p id="total-clients">0</p>
+    </div>
+    <div class="metric">
+      <h2>Clients disconnected</h2>
+      <p id="disconnected">0</p>
+    </div>
+    <div class="metric">
+      <h2>Messages received</h2>
+      <p id="messages-received">0</p>
+    </div>
+    <div class="metric">
+      <h2>Messages sent</h2>
+      <p id="messages-sent">0</p>
+    </div>
+  </div>
 
-<script>
-const ws = new WebSocket("ws://localhost:8080/analytics");
+  <div class="log-container">
+    <h2>Last message</h2>
+    <ul id="messages-log">
+      <!-- Solo se mostrará el último mensaje -->
+    </ul>
+  </div>
 
-ws.onmessage = (event) => {
-    const data = JSON.parse(event.data);
-    const clientsEl = document.getElementById("clients");
+  <script>
+    const ws = new WebSocket("ws://localhost:8080/analytics");
 
-    // Animate number change
-    clientsEl.classList.add("update");
-    clientsEl.textContent = data.totalClients;
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
 
-    setTimeout(() => {
-        clientsEl.classList.remove("update");
-    }, 300);
-};
-</script>
+      document.getElementById("clients").textContent = data.totalClientsConnected;
+      document.getElementById("total-clients").textContent = data.clientsEver;
+      document.getElementById("disconnected").textContent = data.clientsDisconnected;
+      document.getElementById("messages-received").textContent = data.messagesReceived;
+      document.getElementById("messages-sent").textContent = data.messagesSent;
+
+      // Mostrar solo el último mensaje
+      const log = document.getElementById("messages-log");
+      log.innerHTML = ""; // limpiar contenido anterior
+      if (data.lastMessage) {
+        const li = document.createElement("li");
+        li.textContent = data.lastMessage;
+        log.appendChild(li);
+      }
+    };
+  </script>
 </body>
 </html>
