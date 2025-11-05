@@ -55,6 +55,11 @@ fun RemoteEndpoint.Basic.sendTextSafe(message: String) {
 class ElizaEndpoint {
     private val eliza = Eliza()
 
+    companion object {
+        // Set concurrente que guarda las sesiones abiertas
+        val activeSessions: MutableSet<Session> = java.util.concurrent.CopyOnWriteArraySet()
+    }
+
     /**
      * Successful connection
      *
@@ -62,6 +67,7 @@ class ElizaEndpoint {
      */
     @OnOpen
     fun onOpen(session: Session) {
+        activeSessions.add(session)
         logger.info { "Server Connected ... Session ${session.id}" }
         with(session.basicRemote) {
             sendTextSafe("The doctor is in.")
@@ -80,6 +86,7 @@ class ElizaEndpoint {
         session: Session,
         closeReason: CloseReason,
     ) {
+        activeSessions.remove(session)
         logger.info { "Session ${session.id} closed because of $closeReason" }
     }
 
