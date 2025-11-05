@@ -10,7 +10,6 @@ import jakarta.websocket.Session
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT
@@ -25,16 +24,12 @@ class ElizaServerTest {
     @LocalServerPort
     private var port: Int = 0
 
-    @BeforeEach
-    fun setUp() {
-        // Limpia el estado por si quedó algo de otro test
-        ElizaEndpoint.activeSessions.clear()
-    }
-
     @AfterEach
     fun tearDown() {
-        // Cierra conexiones abiertas y limpia
-        ElizaEndpoint.activeSessions.forEach { it.close() }
+        // Cierra sesiones del servidor
+        ElizaEndpoint.activeSessions.forEach { session ->
+            if (session.isOpen) session.close()
+        }
         ElizaEndpoint.activeSessions.clear()
     }
 

@@ -6,7 +6,6 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT
@@ -20,36 +19,13 @@ class SessionsTest {
     @LocalServerPort
     private var port: Int = 0
 
-    @BeforeEach
-    fun setUp() {
-        // Cierra cualquier sesión abierta antes de empezar
-        ElizaEndpoint.activeSessions.forEach { session ->
-            try {
-                if (session.isOpen) {
-                    session.close()
-                }
-            } catch (e: Exception) {
-                logger.warn(e) { "Error closing session ${session.id}" }
-            }
-        }
-        ElizaEndpoint.activeSessions.clear()
-        Thread.sleep(50)
-    }
-
     @AfterEach
     fun tearDown() {
-        // Cierra todas las sesiones abiertas al terminar el test
+        // Cierra sesiones del servidor
         ElizaEndpoint.activeSessions.forEach { session ->
-            try {
-                if (session.isOpen) {
-                    session.close()
-                }
-            } catch (e: Exception) {
-                logger.warn(e) { "Error closing session ${session.id}" }
-            }
+            if (session.isOpen) session.close()
         }
         ElizaEndpoint.activeSessions.clear()
-        Thread.sleep(50)
     }
 
     @Test
@@ -146,17 +122,18 @@ class SessionsTest {
         client1.connect("ws://localhost:$port/eliza")
 
         latch.await()
+        Thread.sleep(200)
 
         // Verificamos que haya dos sesiones activas en el servidor
         val activeCount = ElizaEndpoint.activeSessions.size
         assertEquals(2, activeCount)
 
         assertTrue(list0.contains("Can you think of a specific example?"))
-        // assertTrue(list0.any { it.contains("I am always tired") }, "List 0: $list0")
-        assertTrue(list0.contains("[Session 1]: I am always tired"), "List 0: $list0")
+        val count0 = list0.count { it.contains("I am always tired") }
+        assertEquals(2, count0, "List 0 should contain 2 messages with 'I am always tired'")
 
         assertTrue(list1.contains("Can you think of a specific example?"))
-        // assertTrue(list1.any { it.contains("I am always tired") }, "List 1: $list1")
-        assertTrue(list1.contains("[Session 1]: I am always tired"), "List 1: $list1")
+        val count1 = list1.count { it.contains("I am always tired") }
+        assertEquals(1, count1, "List 1 should contain 1 messages with 'I am always tired'")
     }
 }
