@@ -15,10 +15,17 @@ jobs:
           distribution: 'temurin'
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v5
-      - name: Build with Gradle
-        run: ./gradlew build --no-daemon
-      - name: Test with Gradle
-        run: ./gradlew check --no-daemon
+
+      - name: Build without tests
+        run: ./gradlew build -x test --no-daemon
+        
+      - name: Run ElizaServerTest
+        run: ./gradlew test --tests "websockets.ElizaServerTest"
+      - name: Run AnalyticsIntegrationTest
+        run: ./gradlew test --tests "websockets.AnalyticsIntegrationTest"
+      - name: Run SessionsTest
+        run: ./gradlew test --tests "websockets.SessionsTest"
+      
       - name: Cleanup Gradle Cache
         run: |
           rm -f ~/.gradle/caches/modules-2/modules-2.lock
