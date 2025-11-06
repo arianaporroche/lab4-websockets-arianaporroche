@@ -111,7 +111,7 @@ class SessionsTest {
 
         logger.info { "Test with 2 complex clients" }
 
-        val latch = CountDownLatch(15)
+        val latch = CountDownLatch(16)
         val list0 = mutableListOf<String>()
         val list1 = mutableListOf<String>()
 
