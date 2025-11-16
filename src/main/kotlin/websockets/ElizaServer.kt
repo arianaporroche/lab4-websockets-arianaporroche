@@ -16,11 +16,18 @@ import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.context.annotation.Profile
+import org.springframework.messaging.handler.annotation.MessageMapping
+import org.springframework.messaging.simp.SimpMessagingTemplate
+import org.springframework.messaging.simp.config.MessageBrokerRegistry
 import org.springframework.stereotype.Component
+import org.springframework.stereotype.Controller
+import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker
+import org.springframework.web.socket.config.annotation.StompEndpointRegistry
+import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer
 import org.springframework.web.socket.server.standard.ServerEndpointExporter
 import java.util.Locale
 import java.util.Scanner
-import java.util.concurrent.CopyOnWriteArraySet
 
 @SpringBootApplication
 class Application
@@ -29,10 +36,28 @@ fun main(args: Array<String>) {
     runApplication<Application>(*args)
 }
 
+@Profile("normal")
 @Configuration(proxyBeanMethods = false)
-class WebSocketConfig {
+class NormalWebSocketConfig {
     @Bean
     fun serverEndpoint() = ServerEndpointExporter()
+}
+
+@Profile("stomp")
+@Configuration
+@EnableWebSocketMessageBroker
+class StompWebSocketConfig : WebSocketMessageBrokerConfigurer {
+    override fun configureMessageBroker(registry: MessageBrokerRegistry) {
+        registry.enableSimpleBroker("/topic/")
+        registry.setApplicationDestinationPrefixes("/app")
+    }
+
+    override fun registerStompEndpoints(registry: StompEndpointRegistry) {
+        registry
+            .addEndpoint("/ws")
+            .setAllowedOriginPatterns("*")
+            .withSockJS()
+    }
 }
 
 private val logger = KotlinLogging.logger {}
@@ -51,15 +76,11 @@ fun RemoteEndpoint.Basic.sendTextSafe(message: String) {
     }
 }
 
+@Profile("normal")
 @ServerEndpoint("/eliza")
 @Component
 class ElizaEndpoint {
     private val eliza = Eliza()
-
-    companion object {
-        // Set concurrente que guarda las sesiones abiertas
-        val activeSessions: MutableSet<Session> = CopyOnWriteArraySet()
-    }
 
     /**
      * Successful connection
@@ -68,17 +89,11 @@ class ElizaEndpoint {
      */
     @OnOpen
     fun onOpen(session: Session) {
-        activeSessions.add(session)
-        AnalyticsEndpoint.sendMetricsToAll()
-
         logger.info { "Server Connected ... Session ${session.id}" }
-
         with(session.basicRemote) {
             sendTextSafe("The doctor is in.")
             sendTextSafe("What's on your mind?")
             sendTextSafe("---")
-
-            broadcast("A new client joined. Total: ${activeSessions.size}")
         }
     }
 
@@ -92,12 +107,7 @@ class ElizaEndpoint {
         session: Session,
         closeReason: CloseReason,
     ) {
-        activeSessions.remove(session)
-        AnalyticsEndpoint.sendMetricsToAll()
-
         logger.info { "Session ${session.id} closed because of $closeReason" }
-
-        broadcast("A client disconnected. Remaining: ${activeSessions.size}")
     }
 
     /**
@@ -113,20 +123,12 @@ class ElizaEndpoint {
         logger.info { "Server Message ... Session ${session.id}" }
         val currentLine = Scanner(message.lowercase(Locale.getDefault()))
         if (currentLine.findInLine("bye") == null) {
-            AnalyticsEndpoint.messageReceived(message)
-
             logger.info { "Server received \"${message}\"" }
             runCatching {
                 if (session.isOpen) {
                     with(session.basicRemote) {
                         sendTextSafe(eliza.respond(currentLine))
-                        AnalyticsEndpoint.messageSent()
-
                         sendTextSafe("---")
-                        AnalyticsEndpoint.messageSent()
-
-                        broadcast("[Session ${session.id}]: $message")
-                        AnalyticsEndpoint.messageSent()
                     }
                 }
             }.onFailure {
@@ -145,84 +147,93 @@ class ElizaEndpoint {
     ) {
         logger.error(errorReason) { "Session ${session.id} closed because of ${errorReason.javaClass.name}" }
     }
+}
 
-    private fun broadcast(message: String) {
-        for (s in activeSessions) {
-            s.sendTextSafe(message)
-        }
-        AnalyticsEndpoint.sendMetricsToAll()
-    }
+@Profile("stomp")
+@Controller
+class ElizaController(
+    private val messagingTemplate: SimpMessagingTemplate,
+) {
+    private val eliza = Eliza()
 
-    private fun Session.sendTextSafe(text: String) {
-        try {
-            synchronized(this) {
-                if (isOpen) basicRemote.sendText(text)
-            }
-        } catch (e: Exception) {
-            logger.warn(e) { "Failed to send message to $id" }
+    @MessageMapping("/eliza-chat") // Ruta de entrada
+    fun receiveMessage(message: String) {
+        logger.info { "Received message: $message" }
+
+        val scanner = Scanner(message.lowercase(Locale.getDefault()))
+        if (scanner.findInLine("bye") != null) {
+            // Opcional: enviar un mensaje de despedida
+            messagingTemplate.convertAndSend("/topic/eliza", "Alright then, goodbye!")
+            return
         }
+
+        val response = eliza.respond(scanner)
+        logger.info { "Sending response: $response" }
+
+        // Enviar la respuesta a todos los suscritos al topic /topic/eliza
+        messagingTemplate.convertAndSend("/topic/eliza", response)
     }
 }
 
-@ServerEndpoint("/analytics")
-@Component
-class AnalyticsEndpoint {
-    companion object {
-        val dashboardSessions: MutableSet<Session> = CopyOnWriteArraySet()
-        var analyticsConnectionsEver = 0
-        var clientsDisconnected = 0
-        var messagesReceived = 0
-        var messagesSent = 0
-        var lastMessage: String? = null
+// @ServerEndpoint("/analytics")
+// @Component
+// class AnalyticsEndpoint {
+//     companion object {
+//         val dashboardSessions: MutableSet<Session> = CopyOnWriteArraySet()
+//         var analyticsConnectionsEver = 0
+//         var clientsDisconnected = 0
+//         var messagesReceived = 0
+//         var messagesSent = 0
+//         var lastMessage: String? = null
 
-        fun messageReceived(msg: String) {
-            messagesReceived++
-            lastMessage = msg
-            sendMetricsToAll()
-        }
+//         fun messageReceived(msg: String) {
+//             messagesReceived++
+//             lastMessage = msg
+//             sendMetricsToAll()
+//         }
 
-        fun messageSent() {
-            messagesSent++
-            sendMetricsToAll()
-        }
+//         fun messageSent() {
+//             messagesSent++
+//             sendMetricsToAll()
+//         }
 
-        fun sendMetricsToAll() {
-            val metrics = getMetricsJson()
-            for (s in dashboardSessions) {
-                if (s.isOpen) s.basicRemote.sendTextSafe(metrics)
-            }
-        }
+//         fun sendMetricsToAll() {
+//             val metrics = getMetricsJson()
+//             for (s in dashboardSessions) {
+//                 if (s.isOpen) s.basicRemote.sendTextSafe(metrics)
+//             }
+//         }
 
-        private fun sendMetrics(session: Session) {
-            if (session.isOpen) {
-                session.basicRemote.sendTextSafe(getMetricsJson())
-            }
-        }
+//         private fun sendMetrics(session: Session) {
+//             if (session.isOpen) {
+//                 session.basicRemote.sendTextSafe(getMetricsJson())
+//             }
+//         }
 
-        private fun getMetricsJson(): String =
-            """
-            {
-                "activeElizaClients": ${ElizaEndpoint.activeSessions.size},
-                "analyticsConnectionsEver": $analyticsConnectionsEver,
-                "clientsDisconnected": $clientsDisconnected,
-                "messagesReceived": $messagesReceived,
-                "messagesSent": $messagesSent,
-                "lastMessage": "${lastMessage ?: ""}"
-            }
-            """.trimIndent()
-    }
+//         private fun getMetricsJson(): String =
+//             """
+//             {
+//                 "activeElizaClients": ${ElizaEndpoint.activeSessions.size},
+//                 "analyticsConnectionsEver": $analyticsConnectionsEver,
+//                 "clientsDisconnected": $clientsDisconnected,
+//                 "messagesReceived": $messagesReceived,
+//                 "messagesSent": $messagesSent,
+//                 "lastMessage": "${lastMessage ?: ""}"
+//             }
+//             """.trimIndent()
+//     }
 
-    @OnOpen
-    fun onOpen(session: Session) {
-        dashboardSessions.add(session)
-        analyticsConnectionsEver++
-        sendMetrics(session)
-    }
+//     @OnOpen
+//     fun onOpen(session: Session) {
+//         dashboardSessions.add(session)
+//         analyticsConnectionsEver++
+//         sendMetrics(session)
+//     }
 
-    @OnClose
-    fun onClose(session: Session) {
-        dashboardSessions.remove(session)
-        clientsDisconnected++
-        sendMetricsToAll()
-    }
-}
+//     @OnClose
+//     fun onClose(session: Session) {
+//         dashboardSessions.remove(session)
+//         clientsDisconnected++
+//         sendMetricsToAll()
+//     }
+// }
