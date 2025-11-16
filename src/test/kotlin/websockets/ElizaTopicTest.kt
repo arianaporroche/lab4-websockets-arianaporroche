@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
+import org.springframework.messaging.converter.StringMessageConverter
 import org.springframework.messaging.simp.stomp.StompFrameHandler
 import org.springframework.messaging.simp.stomp.StompHeaders
 import org.springframework.messaging.simp.stomp.StompSession
@@ -14,8 +15,6 @@ import org.springframework.test.context.ActiveProfiles
 import org.springframework.web.socket.WebSocketHttpHeaders
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
 import org.springframework.web.socket.messaging.WebSocketStompClient
-import org.springframework.web.socket.sockjs.client.SockJsClient
-import org.springframework.web.socket.sockjs.client.WebSocketTransport
 import java.lang.reflect.Type
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.LinkedBlockingDeque
@@ -23,7 +22,7 @@ import java.util.concurrent.TimeUnit
 
 @ActiveProfiles("stomp")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class StompElizaControllerTest {
+class ElizaTopicTest {
     @LocalServerPort
     var port: Int = 0
 
@@ -31,10 +30,8 @@ class StompElizaControllerTest {
 
     @Test
     fun `test eliza response`() {
-        val stompClient = WebSocketStompClient(SockJsClient(listOf(WebSocketTransport(StandardWebSocketClient()))))
-        stompClient.messageConverter =
-            org.springframework.messaging.converter
-                .StringMessageConverter()
+        val stompClient = WebSocketStompClient(StandardWebSocketClient())
+        stompClient.messageConverter = StringMessageConverter()
 
         val session: StompSession =
             stompClient
@@ -59,15 +56,16 @@ class StompElizaControllerTest {
             },
         )
 
-        // Vaciar posibles mensajes iniciales
-        queue.clear()
-
         // Enviar mensaje a Eliza
         val msg = "I am always tired"
         session.send("/app/eliza-chat", msg)
 
-        // Esperar respuesta
-        val response = queue.poll(2, TimeUnit.SECONDS)
+        // Esperar hasta recibir la respuesta que no sea un mensaje inicial
+        var response: String?
+        do {
+            response = queue.poll(2, TimeUnit.SECONDS)
+        } while (response in listOf("The doctor is in.", "What's on your mind?", "---"))
+
         println("Received response: $response")
         assert(response!!.isNotEmpty())
         assertEquals("Can you think of a specific example?", response)

@@ -1,3 +1,5 @@
+@file:Suppress("NoWildcardImports")
+
 package websockets
 
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -6,6 +8,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT
 import org.springframework.boot.test.web.server.LocalServerPort
+import org.springframework.messaging.converter.StringMessageConverter
 import org.springframework.messaging.simp.stomp.StompFrameHandler
 import org.springframework.messaging.simp.stomp.StompHeaders
 import org.springframework.messaging.simp.stomp.StompSession
@@ -14,8 +17,6 @@ import org.springframework.test.context.ActiveProfiles
 import org.springframework.web.socket.WebSocketHttpHeaders
 import org.springframework.web.socket.client.standard.StandardWebSocketClient
 import org.springframework.web.socket.messaging.WebSocketStompClient
-import org.springframework.web.socket.sockjs.client.SockJsClient
-import org.springframework.web.socket.sockjs.client.WebSocketTransport
 import java.lang.reflect.Type
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -34,10 +35,8 @@ class SessionsElizaControllerTest {
         val messages = mutableListOf<String>()
 
         fun createClient(): StompSession {
-            val client = WebSocketStompClient(SockJsClient(listOf(WebSocketTransport(StandardWebSocketClient()))))
-            client.messageConverter =
-                org.springframework.messaging.converter
-                    .StringMessageConverter()
+            val client = WebSocketStompClient(StandardWebSocketClient())
+            client.messageConverter = StringMessageConverter()
 
             return client
                 .connect(

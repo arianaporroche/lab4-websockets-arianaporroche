@@ -58,7 +58,7 @@ class StompWebSocketConfig : WebSocketMessageBrokerConfigurer {
         registry
             .addEndpoint("/ws")
             .setAllowedOriginPatterns("*")
-            .withSockJS()
+        // .withSockJS()
     }
 }
 
@@ -151,10 +151,27 @@ class ElizaEndpoint {
     }
 }
 
+/**
+ * ***************************************
+ *            STOMP
+ * ***************************************
+ */
+@Profile("stomp")
+@Component
+class AnalyticsPublisher(
+    private val messagingTemplate: SimpMessagingTemplate,
+) {
+    fun publishActiveSessions(count: Int) {
+        val payload = mapOf("activeElizaClients" to count)
+        messagingTemplate.convertAndSend("/topic/analytics", payload)
+    }
+}
+
 @Profile("stomp")
 @Controller
 class ElizaController(
     private val messagingTemplate: SimpMessagingTemplate,
+    private val analyticsPublisher: AnalyticsPublisher,
 ) {
     private val eliza = Eliza()
 
@@ -170,22 +187,19 @@ class ElizaController(
     ) {
         // Obtener sessionId
         val sessionId = headers["simpSessionId"] as? String ?: return
-        // Registrar la sesión si no estaba
-        activeSessions.add(sessionId)
-        logger.info { "Active sessions: ${activeSessions.size}" }
-        logger.info { "Received message: $message from $sessionId" }
+
+        val isNewSession = activeSessions.add(sessionId)
+        if (isNewSession) analyticsPublisher.publishActiveSessions(activeSessions.size)
 
         val scanner = Scanner(message.lowercase(Locale.getDefault()))
         if (scanner.findInLine("bye") != null) {
-            // Opcional: enviar un mensaje de despedida
-            messagingTemplate.convertAndSend("/topic/eliza", "Alright then, goodbye!")
-            // Remover la sesión
             activeSessions.remove(sessionId)
+            analyticsPublisher.publishActiveSessions(activeSessions.size)
+            messagingTemplate.convertAndSend("/topic/eliza", "Alright then, goodbye!")
             return
         }
 
         val response = eliza.respond(scanner)
-        logger.info { "Sending response: $response" }
 
         // Enviar la respuesta a todos los suscritos al topic /topic/eliza
         messagingTemplate.convertAndSend("/topic/eliza", response)

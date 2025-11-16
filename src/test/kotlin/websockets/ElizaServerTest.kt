@@ -53,8 +53,13 @@ class ElizaServerTest {
         assertTrue(list[3] == "Can you think of a specific example?" || list[4] == "Can you think of a specific example?")
         assertTrue(list[3] == "---" || list[4] == "---")
         // 1. EXPLAIN WHY size = list.size IS NECESSARY
+        //      Because WebSocket communication is asynchronous, and messages
+        //      can arrive during the other asserts.
         // 2. REPLACE BY assertXXX expression that checks an interval; assertEquals must not be used;
+        //      assertTrue
         // 3. EXPLAIN WHY assertEquals CANNOT BE USED AND WHY WE SHOULD CHECK THE INTERVAL
+        //      Because message timing and order are non-deterministic, so the
+        //      number of messages received can vary at different time
         // 4. COMPLETE assertEquals(XXX, list[XXX])
     }
 }
