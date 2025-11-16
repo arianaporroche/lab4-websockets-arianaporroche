@@ -17,6 +17,7 @@ import org.springframework.boot.runApplication
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.context.annotation.Profile
+import org.springframework.context.event.EventListener
 import org.springframework.messaging.handler.annotation.MessageMapping
 import org.springframework.messaging.simp.SimpMessagingTemplate
 import org.springframework.messaging.simp.config.MessageBrokerRegistry
@@ -25,6 +26,7 @@ import org.springframework.stereotype.Controller
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer
+import org.springframework.web.socket.messaging.SessionSubscribeEvent
 import org.springframework.web.socket.server.standard.ServerEndpointExporter
 import java.util.Locale
 import java.util.Scanner
@@ -156,14 +158,29 @@ class ElizaController(
 ) {
     private val eliza = Eliza()
 
+    // Conjunto para llevar el conteo de sesiones activas
+    companion object {
+        val activeSessions: MutableSet<String> = mutableSetOf()
+    }
+
     @MessageMapping("/eliza-chat") // Ruta de entrada
-    fun receiveMessage(message: String) {
-        logger.info { "Received message: $message" }
+    fun receiveMessage(
+        message: String,
+        headers: org.springframework.messaging.MessageHeaders,
+    ) {
+        // Obtener sessionId
+        val sessionId = headers["simpSessionId"] as? String ?: return
+        // Registrar la sesión si no estaba
+        activeSessions.add(sessionId)
+        logger.info { "Active sessions: ${activeSessions.size}" }
+        logger.info { "Received message: $message from $sessionId" }
 
         val scanner = Scanner(message.lowercase(Locale.getDefault()))
         if (scanner.findInLine("bye") != null) {
             // Opcional: enviar un mensaje de despedida
             messagingTemplate.convertAndSend("/topic/eliza", "Alright then, goodbye!")
+            // Remover la sesión
+            activeSessions.remove(sessionId)
             return
         }
 
@@ -172,6 +189,23 @@ class ElizaController(
 
         // Enviar la respuesta a todos los suscritos al topic /topic/eliza
         messagingTemplate.convertAndSend("/topic/eliza", response)
+    }
+}
+
+@Profile("stomp")
+@Component
+class ElizaSessionInitializer(
+    private val messagingTemplate: SimpMessagingTemplate,
+) {
+    @EventListener
+    fun handleSessionSubscribeEvent(event: SessionSubscribeEvent) {
+        val destination = event.message.headers["simpDestination"] as? String
+        if (destination == "/topic/eliza") {
+            // Enviar 3 mensajes iniciales al topic general
+            messagingTemplate.convertAndSend("/topic/eliza", "The doctor is in.")
+            messagingTemplate.convertAndSend("/topic/eliza", "What's on your mind?")
+            messagingTemplate.convertAndSend("/topic/eliza", "---")
+        }
     }
 }
 

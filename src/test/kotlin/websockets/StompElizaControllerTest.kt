@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 
 @ActiveProfiles("stomp")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class ElizaControllerTest {
+class StompElizaControllerTest {
     @LocalServerPort
     var port: Int = 0
 
@@ -59,16 +59,17 @@ class ElizaControllerTest {
             },
         )
 
-        // Enviar un mensaje a Eliza
+        // Vaciar posibles mensajes iniciales
+        queue.clear()
+
+        // Enviar mensaje a Eliza
         val msg = "I am always tired"
         session.send("/app/eliza-chat", msg)
 
-        // Esperar la respuesta
+        // Esperar respuesta
         val response = queue.poll(2, TimeUnit.SECONDS)
         println("Received response: $response")
-
-        // Verificar que contiene algo de la respuesta de Eliza
         assert(response!!.isNotEmpty())
-        assertEquals(response, "Can you think of a specific example?")
+        assertEquals("Can you think of a specific example?", response)
     }
 }
