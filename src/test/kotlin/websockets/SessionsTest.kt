@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 
 @ActiveProfiles("stomp")
 @SpringBootTest(webEnvironment = RANDOM_PORT)
-class SessionsElizaControllerTest {
+class SessionsTest {
     @LocalServerPort
     private var port: Int = 0
 

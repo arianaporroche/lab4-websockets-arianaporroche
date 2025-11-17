@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 
 @ActiveProfiles("stomp")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class ElizaTopicTest {
+class StompElizaTopicTest {
     @LocalServerPort
     var port: Int = 0
 
