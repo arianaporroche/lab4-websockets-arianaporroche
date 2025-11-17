@@ -66,6 +66,8 @@ class AnalyticsTopicTest {
         // Verificar que contiene la clave "activeElizaClients" con valor >= 1
         val activeClients = (analyticsUpdate?.get("activeElizaClients") as? Number)?.toInt() ?: 0
         assert(activeClients >= 1)
+
+        session.disconnect()
     }
 
     @Test
@@ -160,13 +162,17 @@ class AnalyticsTopicTest {
         analyticsInitLatch.await()
         assertTrue(analyticsQueue.size >= 1)
 
-        val analyticsUpdate = analyticsQueue.poll(2, TimeUnit.SECONDS)
-            ?: error("Did not receive analytics update in time")
+        val analyticsUpdate =
+            analyticsQueue.poll(2, TimeUnit.SECONDS)
+                ?: error("Did not receive analytics update in time")
 
         val messagesSent = (analyticsUpdate?.get("messagesSent") as? Number)?.toInt() ?: 0
         assert(messagesSent >= 1)
 
         val messagesReceived = (analyticsUpdate?.get("messagesReceived") as? Number)?.toInt() ?: 0
         assert(messagesReceived >= 1)
+
+        sessionEliza.disconnect()
+        sessionAnalytics.disconnect()
     }
 }

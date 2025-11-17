@@ -86,5 +86,7 @@ class ElizaTopicTest {
 
         assertTrue(queue.size >= 5)
         assertTrue(queue.contains("Can you think of a specific example?"), queue.joinToString())
+
+        session.disconnect()
     }
 }
