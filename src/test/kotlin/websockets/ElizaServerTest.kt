@@ -41,7 +41,7 @@ class ElizaServerTest {
     @Test
     fun onChat() {
         logger.info { "Test thread" }
-        val latch = CountDownLatch(4)
+        val latch = CountDownLatch(5)
         val list = mutableListOf<String>()
 
         val client = ComplexClient(list, latch)
@@ -49,7 +49,7 @@ class ElizaServerTest {
         latch.await()
 
         val size = list.size
-        assertTrue(size >= 4)
+        assertTrue(size >= 5)
         assertTrue(list[3] == "Can you think of a specific example?" || list[4] == "Can you think of a specific example?")
         assertTrue(list[3] == "---" || list[4] == "---")
         // 1. EXPLAIN WHY size = list.size IS NECESSARY

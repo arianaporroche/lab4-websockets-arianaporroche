@@ -2,7 +2,8 @@
 
 package websockets
 
-import org.junit.jupiter.api.Assertions.assertEquals
+// import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.test.web.server.LocalServerPort
@@ -17,6 +18,7 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient
 import org.springframework.web.socket.messaging.WebSocketStompClient
 import java.lang.reflect.Type
 import java.util.concurrent.BlockingQueue
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingDeque
 import java.util.concurrent.TimeUnit
 
@@ -26,10 +28,14 @@ class ElizaTopicTest {
     @LocalServerPort
     var port: Int = 0
 
-    private val queue: BlockingQueue<String> = LinkedBlockingDeque()
-
     @Test
     fun `test eliza response`() {
+        val initLatch = CountDownLatch(3)
+        val responseLatch = CountDownLatch(2)
+
+        val queue: BlockingQueue<String> = LinkedBlockingDeque()
+        var initialMessagesCount = 0
+
         val stompClient = WebSocketStompClient(StandardWebSocketClient())
         stompClient.messageConverter = StringMessageConverter()
 
@@ -51,23 +57,34 @@ class ElizaTopicTest {
                     headers: StompHeaders,
                     payload: Any?,
                 ) {
-                    queue.add(payload as String)
+                    val message = payload as String
+                    queue.add(message)
+
+                    if (initialMessagesCount < 3) {
+                        initLatch.countDown()
+                        initialMessagesCount++
+                    } else {
+                        responseLatch.countDown()
+                    }
                 }
             },
         )
 
+        // Esperar a los mensajes iniciales
+        initLatch.await()
+
+        assertTrue(queue.size >= 3)
+        assertTrue(queue.contains("The doctor is in."))
+        assertTrue(queue.contains("What's on your mind?"))
+        assertTrue(queue.contains("---"))
+
         // Enviar mensaje a Eliza
-        val msg = "I am always tired"
-        session.send("/app/eliza-chat", msg)
+        session.send("/app/eliza-chat", "I am always tired")
 
-        // Esperar hasta recibir la respuesta que no sea un mensaje inicial
-        var response: String?
-        do {
-            response = queue.poll(2, TimeUnit.SECONDS)
-        } while (response in listOf("The doctor is in.", "What's on your mind?", "---"))
+        // Esperar la respuesta
+        responseLatch.await()
 
-        println("Received response: $response")
-        assert(response!!.isNotEmpty())
-        assertEquals("Can you think of a specific example?", response)
+        assertTrue(queue.size >= 5)
+        assertTrue(queue.contains("Can you think of a specific example?"), queue.joinToString())
     }
 }

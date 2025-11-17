@@ -161,8 +161,30 @@ class ElizaEndpoint {
 class AnalyticsPublisher(
     private val messagingTemplate: SimpMessagingTemplate,
 ) {
+    private var messagesSent = 0
+    private var messagesReceived = 0
+
+    fun incrementMessagesSent() {
+        messagesSent++
+        // publishMetrics()
+    }
+
+    fun incrementMessagesReceived() {
+        messagesReceived++
+        // publishMetrics()
+    }
+
     fun publishActiveSessions(count: Int) {
-        val payload = mapOf("activeElizaClients" to count)
+        publishMetrics(count)
+    }
+
+    private fun publishMetrics(activeSessions: Int = -1) {
+        val payload =
+            mutableMapOf<String, Any>(
+                "messagesSent" to messagesSent,
+                "messagesReceived" to messagesReceived,
+            )
+        if (activeSessions >= 0) payload["activeElizaClients"] = activeSessions
         messagingTemplate.convertAndSend("/topic/analytics", payload)
     }
 }
@@ -185,24 +207,34 @@ class ElizaController(
         message: String,
         headers: org.springframework.messaging.MessageHeaders,
     ) {
+        println("HEADERS => " + headers) // BORRAR
+
+        analyticsPublisher.incrementMessagesReceived()
+
         // Obtener sessionId
         val sessionId = headers["simpSessionId"] as? String ?: return
-
         val isNewSession = activeSessions.add(sessionId)
         if (isNewSession) analyticsPublisher.publishActiveSessions(activeSessions.size)
 
         val scanner = Scanner(message.lowercase(Locale.getDefault()))
         if (scanner.findInLine("bye") != null) {
+            analyticsPublisher.incrementMessagesSent()
+            analyticsPublisher.incrementMessagesSent()
             activeSessions.remove(sessionId)
             analyticsPublisher.publishActiveSessions(activeSessions.size)
             messagingTemplate.convertAndSend("/topic/eliza", "Alright then, goodbye!")
+            messagingTemplate.convertAndSend("/topic/eliza", "---")
             return
         }
 
         val response = eliza.respond(scanner)
 
+        analyticsPublisher.incrementMessagesSent()
+        analyticsPublisher.incrementMessagesSent()
+        analyticsPublisher.publishActiveSessions(activeSessions.size)
         // Enviar la respuesta a todos los suscritos al topic /topic/eliza
         messagingTemplate.convertAndSend("/topic/eliza", response)
+        messagingTemplate.convertAndSend("/topic/eliza", "---")
     }
 }
 
@@ -210,78 +242,19 @@ class ElizaController(
 @Component
 class ElizaSessionInitializer(
     private val messagingTemplate: SimpMessagingTemplate,
+    private val analyticsPublisher: AnalyticsPublisher,
 ) {
     @EventListener
     fun handleSessionSubscribeEvent(event: SessionSubscribeEvent) {
         val destination = event.message.headers["simpDestination"] as? String
         if (destination == "/topic/eliza") {
             // Enviar 3 mensajes iniciales al topic general
+            analyticsPublisher.incrementMessagesSent()
+            analyticsPublisher.incrementMessagesSent()
+            analyticsPublisher.incrementMessagesSent()
             messagingTemplate.convertAndSend("/topic/eliza", "The doctor is in.")
             messagingTemplate.convertAndSend("/topic/eliza", "What's on your mind?")
             messagingTemplate.convertAndSend("/topic/eliza", "---")
         }
     }
 }
-
-// @ServerEndpoint("/analytics")
-// @Component
-// class AnalyticsEndpoint {
-//     companion object {
-//         val dashboardSessions: MutableSet<Session> = CopyOnWriteArraySet()
-//         var analyticsConnectionsEver = 0
-//         var clientsDisconnected = 0
-//         var messagesReceived = 0
-//         var messagesSent = 0
-//         var lastMessage: String? = null
-
-//         fun messageReceived(msg: String) {
-//             messagesReceived++
-//             lastMessage = msg
-//             sendMetricsToAll()
-//         }
-
-//         fun messageSent() {
-//             messagesSent++
-//             sendMetricsToAll()
-//         }
-
-//         fun sendMetricsToAll() {
-//             val metrics = getMetricsJson()
-//             for (s in dashboardSessions) {
-//                 if (s.isOpen) s.basicRemote.sendTextSafe(metrics)
-//             }
-//         }
-
-//         private fun sendMetrics(session: Session) {
-//             if (session.isOpen) {
-//                 session.basicRemote.sendTextSafe(getMetricsJson())
-//             }
-//         }
-
-//         private fun getMetricsJson(): String =
-//             """
-//             {
-//                 "activeElizaClients": ${ElizaEndpoint.activeSessions.size},
-//                 "analyticsConnectionsEver": $analyticsConnectionsEver,
-//                 "clientsDisconnected": $clientsDisconnected,
-//                 "messagesReceived": $messagesReceived,
-//                 "messagesSent": $messagesSent,
-//                 "lastMessage": "${lastMessage ?: ""}"
-//             }
-//             """.trimIndent()
-//     }
-
-//     @OnOpen
-//     fun onOpen(session: Session) {
-//         dashboardSessions.add(session)
-//         analyticsConnectionsEver++
-//         sendMetrics(session)
-//     }
-
-//     @OnClose
-//     fun onClose(session: Session) {
-//         dashboardSessions.remove(session)
-//         clientsDisconnected++
-//         sendMetricsToAll()
-//     }
-// }
