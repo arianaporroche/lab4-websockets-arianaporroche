@@ -35,10 +35,12 @@ class AnalyticsTopicTest {
 
         val session: StompSession =
             stompClient
-                .connect("ws://localhost:$port/ws", WebSocketHttpHeaders(), object : StompSessionHandlerAdapter() {})
-                .get(1, TimeUnit.SECONDS)
+                .connect(
+                    "ws://localhost:$port/ws",
+                    WebSocketHttpHeaders(),
+                    object : StompSessionHandlerAdapter() {},
+                ).get(1, TimeUnit.SECONDS)
 
-        // Suscribirse al topic /topic/analytics
         session.subscribe(
             "/topic/analytics",
             object : StompFrameHandler {
@@ -77,39 +79,31 @@ class AnalyticsTopicTest {
 
         var initialMessagesCount = 0
 
-        val stompClient = WebSocketStompClient(StandardWebSocketClient())
-        stompClient.messageConverter = StringMessageConverter()
+        val stompClientEliza = WebSocketStompClient(StandardWebSocketClient())
+        stompClientEliza.messageConverter = StringMessageConverter()
+        val stompClientAnalytics = WebSocketStompClient(StandardWebSocketClient())
+        stompClientAnalytics.messageConverter = MappingJackson2MessageConverter()
 
-        val session: StompSession =
-            stompClient
+        val sessionEliza: StompSession =
+            stompClientEliza
                 .connect(
                     "ws://localhost:$port/ws",
                     WebSocketHttpHeaders(),
                     object : StompSessionHandlerAdapter() {},
                 ).get(1, TimeUnit.SECONDS)
 
-        // -------------------------------
-        // Suscripción a /topic/analytics
-        // -------------------------------
-        session.subscribe(
-            "/topic/analytics",
-            object : StompFrameHandler {
-                override fun getPayloadType(headers: StompHeaders): Type = Map::class.java
-
-                override fun handleFrame(
-                    headers: StompHeaders,
-                    payload: Any?,
-                ) {
-                    analyticsQueue.add(payload as Map<String, Any>)
-                    analyticsInitLatch.countDown()
-                }
-            },
-        )
+        val sessionAnalytics: StompSession =
+            stompClientAnalytics
+                .connect(
+                    "ws://localhost:$port/ws",
+                    WebSocketHttpHeaders(),
+                    object : StompSessionHandlerAdapter() {},
+                ).get(1, TimeUnit.SECONDS)
 
         // ---------------------------
         // Suscripción a /topic/eliza
         // ---------------------------
-        session.subscribe(
+        sessionEliza.subscribe(
             "/topic/eliza",
             object : StompFrameHandler {
                 override fun getPayloadType(headers: StompHeaders): Type = String::class.java
@@ -131,6 +125,24 @@ class AnalyticsTopicTest {
             },
         )
 
+        // -------------------------------
+        // Suscripción a /topic/analytics
+        // -------------------------------
+        sessionAnalytics.subscribe(
+            "/topic/analytics",
+            object : StompFrameHandler {
+                override fun getPayloadType(headers: StompHeaders): Type = Map::class.java
+
+                override fun handleFrame(
+                    headers: StompHeaders,
+                    payload: Any?,
+                ) {
+                    analyticsQueue.add(payload as Map<String, Any>)
+                    analyticsInitLatch.countDown()
+                }
+            },
+        )
+
         // Esperar a los mensajes iniciales de Eliza
         elizaInitLatch.await()
         assertTrue(elizaQueue.size >= 3)
@@ -138,34 +150,23 @@ class AnalyticsTopicTest {
         // -------------------------------
         // Enviar mensaje al controlador
         // -------------------------------
-        session.send("/app/eliza-chat", "I am always tired")
+        sessionEliza.send("/app/eliza-chat", "I am always tired")
 
         // Esperar a la respuesta de Eliza
         elizaResponseLatch.await()
         assertTrue(elizaQueue.size >= 5)
 
         // Esperar el primer mensaje de analytics
-        // analyticsInitLatch.await()
-        // assertTrue(analyticsQueue.size >= 1)
+        analyticsInitLatch.await()
+        assertTrue(analyticsQueue.size >= 1)
 
-        // // Esperar una respuesta de ELIZA
-        // val elizaResponse =
-        //     elizaQueue.poll(2, TimeUnit.SECONDS)
-        //         ?: error("Did not receive ELIZA response in time")
+        val analyticsUpdate = analyticsQueue.poll(2, TimeUnit.SECONDS)
+            ?: error("Did not receive analytics update in time")
 
-        // println("ELIZA response = $elizaResponse")
+        val messagesSent = (analyticsUpdate?.get("messagesSent") as? Number)?.toInt() ?: 0
+        assert(messagesSent >= 1)
 
-        // // Ahora esperamos la actualización del topic de analytics
-        // val analyticsUpdate =
-        //     analyticsQueue.poll(2, TimeUnit.SECONDS)
-        //         ?: error("Did not receive analytics update in time")
-
-        // println("Analytics after sending a message = $analyticsUpdate")
-
-        // val sent = (analyticsUpdate["messagesSent"] as Number).toInt()
-        // val received = (analyticsUpdate["messagesReceived"] as Number).toInt()
-
-        // assert(sent >= 1) { "messagesSent should be >= 1 but was $sent" }
-        // assert(received >= 1) { "messagesReceived should be >= 1 but was $received" }
+        val messagesReceived = (analyticsUpdate?.get("messagesReceived") as? Number)?.toInt() ?: 0
+        assert(messagesReceived >= 1)
     }
 }
