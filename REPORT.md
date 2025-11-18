@@ -2,7 +2,7 @@
 
 **Author:** Ariana Porroche Llorén (874055)
 
-**Date:** 5th November 2025
+**Date:** 18th November 2025
 
 **Course:** Web Engineering
 
@@ -19,64 +19,63 @@ I tried to interact with the Eliza Server via Postman, connecting to `ws://local
 | ![Postman initial tests at ws://localhost:8080/eliza](./postman-initial-tests.png) |
 
 
-Additionally, I extended the project with two optional enhancements:
+Additionally, I extended the project with three optional enhancements:
+
+### 1. STOMP!:
+  - **Description:**
+  Added full STOMP protocol support to the WebSocket server and implemented a STOMP-based ELIZA client to test publish/subscribe message handling.
+
+  - **Implementation:**
+  Created a new STOMP WebSocket configuration (`StompWebSocketConfig`) enabling `/ws` as the STOMP endpoint and activating a simple broker for `/topic/**`.
+  Implemented ElizaController using `@MessageMapping("/eliza-chat")` to receive STOMP messages and broadcast ELIZA responses to `/topic/eliza`.
+  Also added an event listener (`ElizaSessionInitializer`) that automatically sends the three initial greeting messages to any client subscribing to `/topic/eliza`.
+
+  - **Functionality:**
+  Multiple clients can now subscribe to the same STOMP topic and receive real-time broadcasted ELIZA responses.
+
+  - **Testing:**
+  Validated using the `StompElizaTopicTest.kt` integration test, which verifies subscription behavior, initial greeting broadcast, and correct delivery of ELIZA responses through the `/topic/eliza` STOMP channel.
 
 ### 5. Real-time Analytics Dashboard:
   - **Description:**
-  Implemented a new `/analytics` WebSocket endpoint to broadcast live server statistics such as: `activeElizaClients`, `analyticsConnectionsEver`, `clientsDisconnected`, `messagesReceived`, `messagesSent`, and `lastMessage`.
+  The analytics system was rebuilt to work entirely over STOMP. Instead of a dedicated WebSocket endpoint, analytics are now published as JSON messages on the STOMP topic `/topic/analytics`. Metrics include: `messagesSent`, `messagesReceived` and `activeElizaClients`.
+
   - **Implementation:**
-  Added the `AnalyticsEndpoint` class to manage metrics and send real-time JSON updates to all connected analytics clients. Additionally, created a simple front-end page, dashboard.html, available at `http://localhost:8080/dashboard.html`, which visually displays these analytics using a live WebSocket connection.
+  Implemented `AnalyticsPublisher`, a Spring component that tracks analytics counters and publishes updates to `/topic/analytics` using SimpMessagingTemplate. Analytics are triggered automatically whenever a client sends a message or joins or leaves the Eliza topic.
+
   - **Functionality:**
-  The dashboard connects via WebSocket to `ws://localhost:8080/analytics`, automatically updating the displayed metrics and showing the latest message sent through the ELIZA chat.
+  Any analytics dashboard or STOMP client subscribed to `/topic/analytics` receives real-time updates reflecting:
+    - Active STOMP sessions using the ELIZA chat
+    - Total messages sent and received
+    - Broadcast events triggered by ELIZA interactions. This makes the analytics fully synchronized with the STOMP-based ELIZA workflow
+
   - **Testing:**
-  Functionality was verified using the integration test file `AnalyticsIntegrationTest.kt`, simulating multiple clients and message exchanges. Manual verification was also done via `Postman` to ensure metrics updated correctly and messages were reflected in real time.
+  Verified through `StompAnalyticsTopicTest.kt`, which simulates STOMP clients subscribing to `/topic/analytics` and sending messages to ELIZA. The tests confirm that:
+    - `activeElizaClients` is updated when new sessions appear
+    - `messagesSent` and `messagesReceived` increase appropriately
+    - Analytics updates are delivered reliably through broadcast to the topic
 
-
-| Postman analytics test at ws://localhost:8080/analytics |
-|-----------|
-| ![Postman test at ws://localhost:8080/analytics](./postman-analytics-endpoint.png) |
-
-| Initial Dashboard | Dashboard with 1 eliza client | Dashboard with 2 eliza clients |
-|-----------|-----------|-----------|
-| ![Initial Dashboard](./dashboard-initial.png) | ![Dashboard with 1 eliza client](./dashboard-1-eliza-client.png) | ![Dashboard with 2 eliza clients](./dashboard-2-eliza-clients.png) |
-
-| Dashboard when client has sent 1 message | Dashboard when client has sent 2 messages |
-|-----------|-----------|
-| ![Dashboard with 1 message sent](./dashboard-1-message-sent.png) | ![Dashboard with 2 messages sent](./dashboard-2-messages-sent.png) |
 
 ### 8. Session Management and Broadcast:
   - **Description:**
-  Extended the `/eliza` WebSocket endpoint to maintain active sessions in memory using a `CopyOnWriteArraySet`. This allows the server to track all currently connected clients efficiently.
+  Migrated session tracking and message broadcasting to the STOMP-based architecture. Active sessions are now tracked using Spring session IDs, and ELIZA responses are broadcast through the `/topic/eliza` channel.
+
   - **Implementation:**
-  Implemented a broadcast system that sends real-time updates to all connected clients whenever someone joins, leaves, or sends a message. Each message triggers analytics tracking to update metrics such as messages sent, messages received, and active clients.
+  `ElizaController` handles incoming messages and broadcasts responses. `ElizaSessionInitializer` sends the initial three ELIZA messages to any client subscribing to `/topic/eliza`.
+
   - **Functionality:**
-  The server now keeps all clients synchronized by broadcasting chat activity and session changes, ensuring both the ELIZA clients and the analytics dashboard reflect the current state of active sessions.
+  All connected clients now receive synchronized ELIZA responses and greeting messages. Session counts are updated automatically whenever a client joins, leaves, or sends a message.
+  
   - **Testing:**
-  Verified using `SessionsTest.kt`, simulating multiple concurrent clients. Confirmed that broadcasts reached all clients and analytics metrics updated correctly. Manual tests via `Postman` confirmed expected real-time behavior.
-
-| Client 1 | Client 2 | Client 3 |
-|-----------|-----------|-----------|
-| ![Client 1](./postman-sessions-client-1.png) | ![Client 2](./postman-sessions-client-2.png) | ![Client 3](./postman-sessions-client-3.png) |
-
-Next, I tested the scenario where Client 1 sends a message and the `ElizaServer` broadcasts it to all connected clients:
-
-| Client 1 | Client 2 | Client 3 |
-|-----------|-----------|-----------|
-| ![Client 1](./postman-broadcast-client-1.png) | ![Client 2](./postman-broadcast-client-2.png) | ![Client 3](./postman-broadcast-client-3.png) |
-
+  Validated with `SessionsTest.kt` (initial greetings & active session tracking) and `BroadcastTest.kt` (ensuring that ELIZA responses are broadcast to all subscribers). These integration tests simulate multiple STOMP clients and confirm consistent real-time behavior.
 
 
 ## Technical Decisions
 
-- **Shared Singleton for Analytics:**
-  I updated `AnalyticsEndpoint` to use a companion object instead of creating new instances per message. This ensures a consistent global state across all connections.
-- **Thread Safety:**
-  Used `CopyOnWriteArraySet` to safely handle multiple clients connecting and disconnecting at the same time.
-- **Synchronized Sending:**
-  Wrapped `sendText` calls in synchronized blocks (`sendTextSafe`) to avoid `IllegalStateException` when multiple messages are sent concurrently.
-- **JSON Handling:**
-  Used `kotlinx.serialization.json` utilities (`jsonObject`, `jsonPrimitive`) for structured parsing in integration tests, making it easier to read and verify the metrics.
-
+- **Dual Profiles for WebSocket Modes (normal & STOMP):**
+To keep both implementations cleanly separated, I introduced two Spring Boot profiles using `@Profile` annotations on each class and endpoint, and `@ActiveProfiles` inside the STOMP tests:
+  - `normal` → Activates the Jakarta WebSocket version (`@ServerEndpoint("/eliza")`) as originally required for the assignment.
+  - `stomp` → Activates the Spring WebSocket + STOMP message-broker setup with `/ws` as the endpoint, `/app` as the application prefix, and `/topic/**` as broker destinations.
 
 ## Learning Outcomes
 
@@ -94,13 +93,12 @@ OpenAI ChatGPT (GPT-5) — used as a coding assistant.
 
 ### AI-Assisted Work
 
-- Guidance and debugging help for WebSocket message synchronization and test failures.
-- Suggestions for refactoring `AnalyticsEndpoint` to use a shared companion object.
-- Minor help writing Markdown documentation (this project report).
-- Estimated AI-assisted work: ~25%
+- Guidance during debugging when STOMP messages were not being delivered correctly.
+- Minor assistance revising the structure and clarity of this project report.
+- Estimated AI-assisted work: ~20%.
 
 ### Original Work
 
-- Full implementation of `AnalyticsEndpoint`, `ElizaEndpoint` modifications, and all integration tests were written and debugged manually.
-- I independently analyzed test behavior, concurrency issues, and validated functionality with manual Postman testing.
-- The learning process involved researching WebSocket lifecycle handling and synchronization best practices.
+- All code involving STOMP configuration, controllers, session initialization, analytics publishing, and integration testing (`StompElizaTopicTest`, `StompAnalyticsTopicTest`, `BroadcastTest`, `SessionsTest`) was implemented and debugged independently.
+- Design decisions (profiles, message routing, greetings logic, analytics flow) were made manually after testing different alternatives.
+- Manual Postman/STOMP client testing and troubleshooting were performed without AI assistance.
